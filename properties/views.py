@@ -1,9 +1,10 @@
+from django.views.decorators.http import require_GET
 from django.http import JsonResponse
-from django.views.decorators.cache import cache_page
-from .utils import get_all_properties
+from django.views.decorators.cache import cache_page, never_cache
+from properties.utils import get_all_properties, get_redis_cache_metrics
 
 
-@cache_page(60 * 15)  # 15 minutes
+@cache_page(60 * 15)
 def property_list(request):
     """
     Returns JSON list of properties. Response is cached for 15 minutes,
@@ -24,3 +25,10 @@ def property_list(request):
         })
 
     return JsonResponse({"properties": data})
+
+
+@never_cache
+@require_GET
+def cache_metrics(request):
+    metrics = get_redis_cache_metrics()
+    return JsonResponse({"metrics": metrics})

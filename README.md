@@ -6,6 +6,7 @@ Responses are cached at two layers:
 - **View cache**: `/properties/` endpoint cached for **15 minutes**
 - **Low-level cache**: the queryset backing the list cached for **1 hour**
 - **Signals**: automatic cache invalidation on create/update/delete
+- **Metrics**: `/properties/cache-metrics/` to inspect Redis hit/miss ratio
 
 ---
 
@@ -19,7 +20,7 @@ Responses are cached at two layers:
 
 ## Quickstart
 
-### 1) Clone & install
+### 1. Clone & install
 
 ```bash
 git clone https://github.com/mpyatt/alx-backend-caching_property_listings.git
@@ -28,7 +29,7 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ````
 
-### 2) Bring up Postgres & Redis
+### 2. Bring up Postgres & Redis
 
 ```bash
 docker compose up -d
@@ -36,7 +37,7 @@ docker compose up -d
 # redis    -> 127.0.0.1:6379
 ```
 
-### 3) Configure env (optional)
+### 3. Configure env (optional)
 
 Create `.env` (or export env vars in your shell):
 
@@ -55,7 +56,7 @@ POSTGRES_PORT=5432
 REDIS_URL=redis://127.0.0.1:6379/1  # use redis://redis:6379/1 if Django runs in Docker
 ```
 
-### 4) Migrate & run
+### 4. Migrate & run
 
 ```bash
 python manage.py makemigrations
@@ -73,13 +74,11 @@ Open: [http://127.0.0.1:8000/properties/](http://127.0.0.1:8000/properties/)
 
 Returns all properties as JSON.
 
-Example:
-
 ```bash
 curl http://127.0.0.1:8000/properties/
 ```
 
-Response:
+Example response:
 
 ```json
 {
@@ -96,6 +95,41 @@ Response:
 }
 ```
 
+### `GET /properties/cache-metrics/`
+
+Returns Redis keyspace hits/misses and hit ratio (never cached).
+
+```bash
+curl http://127.0.0.1:8000/properties/cache-metrics/
+```
+
+Example response:
+
+```json
+{
+  "metrics": {
+    "keyspace_hits": 10,
+    "keyspace_misses": 3,
+    "total_requests": 13,
+    "hit_ratio": 0.7692307692307693
+  }
+}
+```
+
+---
+
+## Seeding Data
+
+Creates realistic sample data.
+
+```bash
+python manage.py seed_properties --count 25
+# or reset and seed:
+python manage.py seed_properties --flush --count 40
+```
+
+> After seeding, the list caches are invalidated automatically by signals; the command also clears `"all_properties"` explicitly.
+
 ---
 
 ## Caching Design
@@ -109,7 +143,7 @@ You can also inspect cache performance:
 ```python
 from properties.utils import get_redis_cache_metrics
 print(get_redis_cache_metrics())
-# {'keyspace_hits': 10, 'keyspace_misses': 3, 'hit_ratio': 0.769...}
+# {'keyspace_hits': 10, 'keyspace_misses': 3, 'total_requests': 13, 'hit_ratio': 0.769...}
 ```
 
 ---
@@ -128,6 +162,9 @@ alx-backend-caching_property_listings/
 └── properties/
     ├── apps.py
     ├── __init__.py
+    ├── management/
+    │   └── commands/
+    │       └── seed_properties.py
     ├── models.py
     ├── signals.py
     ├── utils.py
@@ -147,10 +184,3 @@ alx-backend-caching_property_listings/
 
 - **Cache not invalidating**
   Check that `properties.apps.PropertiesConfig` is in `INSTALLED_APPS` and that `apps.py#ready()` imports `signals`.
-
----
-
-## Notes
-
-- `django-redis` is a **cache backend**; it does **not** go in `INSTALLED_APPS`.
-- Prefer serializing querysets (e.g., `.values() -> list`) into Redis rather than pickling ORM objects.
